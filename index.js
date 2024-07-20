@@ -8,6 +8,7 @@ const axios = require("axios");
 const WebSocket = require("ws");
 const csv = require("csv-parse");
 const fs = require("fs");
+require('./logger');
 
 // Create a WebSocket connection
 const ws = new WebSocket(
