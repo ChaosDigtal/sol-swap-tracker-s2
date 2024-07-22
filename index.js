@@ -8,12 +8,7 @@ const axios = require("axios");
 const WebSocket = require("ws");
 const csv = require("csv-parse");
 const fs = require("fs");
-require('./logger');
-
-// Create a WebSocket connection
-const ws = new WebSocket(
-  "wss://atlas-mainnet.helius-rpc.com/?api-key=07a1e8c0-d021-46db-a05a-d26f9eb8cd1c"
-);
+require("./logger");
 
 const client = new Client({
   host: "trading.copaicjskl31.us-east-2.rds.amazonaws.com",
@@ -56,22 +51,26 @@ const programIds = [
 // Function to send a request to the WebSocket server
 
 async function test() {
-  const tx = await connection_helius.getParsedTransactions(
-    [
-      "ts4HUgjk4oH4uBFqkWGqCpf4PvbwMRkbCwD5TLSEaRbMVGYRStnmWH1mAVimA52R9fziyM3fCqp1Rstto8wgWme",
-      "4QXtRHnWrVRCVzxuZN9b33h6Y18Bs6sbdsKqpn5QjnzK44kAvoGsB754o2mN5NwEfZ7Br2ukcWHuhY3bhpSNrnnb",
-    ],
-    { maxSupportedTransactionVersion: 0 }
+  const SOL2USD = await getTokenPrice(
+    "So11111111111111111111111111111111111111112"
   );
-  var fs = require("fs");
-  const jsonString = JSON.stringify(tx, null, 2);
-  fs.writeFile("d.json", jsonString, (err) => {
-    if (err) {
-      console.error("Error writing to file", err);
-    } else {
-      console.log("Transaction saved to b.json");
-    }
-  });
+  console.log(SOL2USD);
+  //   const tx = await connection_helius.getParsedTransactions(
+  //     [
+  //       "ts4HUgjk4oH4uBFqkWGqCpf4PvbwMRkbCwD5TLSEaRbMVGYRStnmWH1mAVimA52R9fziyM3fCqp1Rstto8wgWme",
+  //       "4QXtRHnWrVRCVzxuZN9b33h6Y18Bs6sbdsKqpn5QjnzK44kAvoGsB754o2mN5NwEfZ7Br2ukcWHuhY3bhpSNrnnb",
+  //     ],
+  //     { maxSupportedTransactionVersion: 0 }
+  //   );
+  //   var fs = require("fs");
+  //   const jsonString = JSON.stringify(tx, null, 2);
+  //   fs.writeFile("d.json", jsonString, (err) => {
+  //     if (err) {
+  //       console.error("Error writing to file", err);
+  //     } else {
+  //       console.log("Transaction saved to b.json");
+  //     }
+  //   });
 }
 
 //test();
@@ -106,19 +105,34 @@ async function getTokenInfo(accountInfo, quantity) {
   return { id: mint, symbol, amount };
 }
 
-async function getTokenPrice(tokenAddress) {
-  const url = "https://api.coingecko.com/api/v3/simple/token_price/solana";
-  const params = {
-    contract_addresses: tokenAddress,
-    vs_currencies: "usd",
-  };
-
+async function getTokenPrice(token_address) {
   try {
-    const response = await axios.get(url, { params });
-    const data = response.data;
-    return new Decimal(data[tokenAddress].usd);
-  } catch (error) {
-    console.error("Error fetching price:", error);
+    // const response = await axios.get(`https://api.coingecko.com/api/v3/coins/ethereum/contract/${token_address}`);
+
+    // return new Decimal(response.data.market_data.current_price.usd);
+    const headers = {
+      accept: "application/json, multipart/mixed",
+      "accept-language": "en-US,en;q=0.9",
+      authorization: "d57e4f7f224c8359f433c5882e1180726b1d48e4",
+      "content-type": "application/json",
+      "user-agent":
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    };
+    const json_data = {
+      query:
+        '{\n  filterTokens(\n    filters: {\n      network: [1399811149]\n    }\n    limit: 200\n    tokens:["' +
+        token_address +
+        '"]\n  ) {\n    results {\n      change1\n      change4\n      change12\n      change24\n      createdAt\n      volume1\n      volume4\n      volume12\n      isScam\n      holders\n      liquidity\n      marketCap\n      priceUSD\n      volume24\n      pair {\n        token0Data{symbol}\n        token1Data{symbol}\n        address\n      }\n      exchanges {\n        address\n      }\n      token {\n        address\n        decimals\n        name\n        networkId\n        symbol\n        \n      }\n    }\n  }\n}',
+    };
+
+    const response = await axios.post(
+      "https://graph.defined.fi/graphql",
+      json_data,
+      { headers }
+    );
+    return new Decimal(response.data.data.filterTokens.results[0].priceUSD);
+  } catch (e) {
+    console.error(e);
     return new Decimal(0);
   }
 }
@@ -631,60 +645,71 @@ function startPing(ws) {
 
 // Define WebSocket event handlers
 
-ws.on("open", async function open() {
-  console.log("WebSocket is open");
-  const filePath = "sol_wallets.csv";
+function initializeWebSocket() {
+  // Create a WebSocket connection
+  const ws = new WebSocket(
+    "wss://atlas-mainnet.helius-rpc.com/?api-key=07a1e8c0-d021-46db-a05a-d26f9eb8cd1c"
+  );
 
-  // Create a list to store the rows' data
-  const dataList = [];
+  ws.on("open", async function open() {
+    console.log("WebSocket is open");
+    const filePath = "sol_wallets.csv";
 
-  // Create a read stream from the CSV file
-  const readStream = fs.createReadStream(filePath);
+    // Create a list to store the rows' data
+    const dataList = [];
 
-  // Create a CSV parser
-  const parser = csv.parse({ delimiter: ",", from_line: 2 });
+    // Create a read stream from the CSV file
+    const readStream = fs.createReadStream(filePath);
 
-  // Handle each row
-  parser.on("readable", () => {
-    let record;
-    while ((record = parser.read()) !== null) {
-      dataList.push(record[0]);
+    // Create a CSV parser
+    const parser = csv.parse({ delimiter: ",", from_line: 2 });
+
+    // Handle each row
+    parser.on("readable", () => {
+      let record;
+      while ((record = parser.read()) !== null) {
+        dataList.push(record[0]);
+      }
+    });
+
+    // Handle the end of the file
+    parser.on("end", () => {
+      sendRequest(ws, dataList); // Send a request once the WebSocket is open
+      startPing(ws); // Start sending pings
+    });
+
+    // Handle errors
+    parser.on("error", (err) => {
+      console.error(err.message);
+    });
+
+    readStream.pipe(parser);
+  });
+
+  ws.on("message", function incoming(data) {
+    const messageStr = data.toString("utf8");
+    try {
+      const messageObj = JSON.parse(messageStr);
+      if (!messageObj.params) return;
+      const tx = messageObj.params.result.transaction;
+      parseTransaction(tx);
+    } catch (e) {
+      console.error("Failed to parse JSON:", e);
     }
   });
 
-  // Handle the end of the file
-  parser.on("end", () => {
-    sendRequest(ws, dataList); // Send a request once the WebSocket is open
-    startPing(ws); // Start sending pings
+  ws.on("error", function error(err) {
+    console.error("WebSocket error:", err);
   });
 
-  // Handle errors
-  parser.on("error", (err) => {
-    console.error(err.message);
+  ws.on("close", function close() {
+    console.log("WebSocket is closed");
+    console.log("WebSocket is restarting in 5 seconds");
+    setTimeout(initializeWebSocket, 5000);
   });
+}
 
-  readStream.pipe(parser);
-});
-
-ws.on("message", function incoming(data) {
-  const messageStr = data.toString("utf8");
-  try {
-    const messageObj = JSON.parse(messageStr);
-    if (!messageObj.params) return;
-    const tx = messageObj.params.result.transaction;
-    parseTransaction(tx);
-  } catch (e) {
-    console.error("Failed to parse JSON:", e);
-  }
-});
-
-ws.on("error", function error(err) {
-  console.error("WebSocket error:", err);
-});
-
-ws.on("close", function close() {
-  console.log("WebSocket is closed");
-});
+initializeWebSocket();
 
 const server = http.createServer((req, res) => {
   res.statusCode = 200;
